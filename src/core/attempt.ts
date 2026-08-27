@@ -180,11 +180,11 @@ export async function runObserve(config: ObserveRunConfig): Promise<RunOutcome> 
       });
     }
     result = outcome.accepted
-      ? { classification: "notification_sent", findings }
+      ? { classification: "notification_sent", ...(findings.length === 0 ? {} : { findings }) }
       : {
           classification: "notification_delivery_failure",
           error: (outcome.error ?? new InspectorError("IO_ERROR", "Delivery failed", "send", true)).toEnvelope(),
-          findings,
+          ...(findings.length === 0 ? {} : { findings }),
         };
   } else {
     const outcome = await httpObserveDelivery(config.target.http, config.message.raw, config.connectTimeoutMs);
@@ -200,11 +200,11 @@ export async function runObserve(config: ObserveRunConfig): Promise<RunOutcome> 
       response = responseEvidence(outcome.unexpectedBody, false);
     }
     result = outcome.accepted
-      ? { classification: "notification_sent", findings }
+      ? { classification: "notification_sent", ...(findings.length === 0 ? {} : { findings }) }
       : {
           classification: "notification_delivery_failure",
           error: (outcome.error ?? new InspectorError("IO_ERROR", "Delivery failed", "send", true)).toEnvelope(),
-          findings,
+          ...(findings.length === 0 ? {} : { findings }),
         };
   }
 

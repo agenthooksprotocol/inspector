@@ -66,7 +66,11 @@ export function classifyInterceptResponse(raw: string, expectedId: string): Vali
 
 /** Classify a failure that occurred before a validatable response existed. */
 export function classifyFailure(error: InspectorError, findings: Finding[] = []): ClassifiedResult {
-  return { classification: "operational_failure", error: error.toEnvelope(), findings };
+  return {
+    classification: "operational_failure",
+    error: error.toEnvelope(),
+    ...(findings.length === 0 ? {} : { findings }),
+  };
 }
 
 /**

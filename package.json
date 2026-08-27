@@ -1,0 +1,22 @@
+{
+  "name": "@agenthooksprotocol/inspector",
+  "version": "0.1.0",
+  "private": true,
+  "description": "One-shot CLI harness client for testing AHP backends (Stage 1).",
+  "type": "module",
+  "engines": { "node": ">=20" },
+  "bin": { "ahp-inspector": "./dist/src/cli/main.js" },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "node --test dist/test/*.test.js"
+  },
+  "dependencies": {
+    "@agenthooksprotocol/sdk": "link:../typescript-sdk/packages/sdk"
+  },
+  "devDependencies": {
+    "@agenthooksprotocol/testing": "link:../typescript-sdk/packages/testing",
+    "@types/node": "^24.0.0",
+    "ajv": "^8.17.0",
+    "typescript": "^5.7.0"
+  }
+}

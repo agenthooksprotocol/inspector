@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { before, describe, it } from "node:test";
 import { interceptEvent, tempDir, writeEventFile } from "./helpers/fixtures.js";
 import { FAKE_BACKEND, SCRIPTED_BACKEND } from "./helpers/paths.js";
-import { runCli } from "./helpers/run-cli.js";
+import { exportedPath, runCli } from "./helpers/run-cli.js";
 
 interface MachineResult {
   result: {
@@ -13,6 +13,8 @@ interface MachineResult {
     error?: { code: string; message: string; phase: string; retryable: boolean };
   };
   simulation?: { simulated: boolean; policy: string; consequence: string };
+  /** Present only under --verbose. */
+  transport?: { stdout?: string; stderr?: string };
 }
 
 let eventPath: string;
@@ -30,7 +32,6 @@ function args(backendArgs: string[], extra: string[] = [], timeoutMs = 3000): st
     "--event", eventPath,
     "--timeout-ms", String(timeoutMs),
     "--failure-policy", "fail-open",
-    "--format", "json",
     ...extra,
     "--", process.execPath, ...backendArgs,
   ];
@@ -117,8 +118,7 @@ describe("stdio intercept deadline (scenario 7)", () => {
     assert.equal(run.code, 1);
     const record = parseSingle(run.stdout);
     assert.equal(record.result.error?.code, "TIMEOUT");
-    const actualPath = /Diagnostic bundle written to (.+)/.exec(run.stderr)?.[1] as string;
-    const bundle = JSON.parse(readFileSync(actualPath, "utf8")) as {
+    const bundle = JSON.parse(readFileSync(exportedPath(run.stderr), "utf8")) as {
       attempts: Array<{ response?: { raw: string; late?: boolean }; timing: { deadlineExceeded: boolean; lateResponse: boolean }; result: { classification: string } }>;
     };
     const attempt = bundle.attempts[0];
@@ -139,8 +139,8 @@ describe("stdio framing discipline (scenario 8)", () => {
     assert.equal(record.result.classification, "operational_failure");
     assert.equal(record.result.error?.code, "MALFORMED_JSON_RPC");
     assert.match(record.result.error?.message ?? "", /AHP-STDIO-001/);
-    // Verbose evidence retains the polluted raw stdout.
-    assert.match(run.stderr, /starting scripted backend/);
+    // Verbose evidence in the JSON record retains the polluted raw stdout.
+    assert.match(record.transport?.stdout ?? "", /starting scripted backend/);
   });
 
   it("classifies a multiline (pretty-printed) response as an operational failure", async () => {
@@ -156,7 +156,7 @@ describe("stdio process failures (scenario 9)", () => {
   it("classifies a launch failure as TARGET_UNAVAILABLE", async () => {
     const run = await runCli([
       "--transport", "stdio", "--method", "hooks/intercept", "--event", eventPath,
-      "--timeout-ms", "3000", "--failure-policy", "fail-open", "--format", "json",
+      "--timeout-ms", "3000", "--failure-policy", "fail-open",
       "--", "/nonexistent/definitely-missing-backend",
     ]);
     assert.equal(run.code, 1);
@@ -195,7 +195,7 @@ describe("failure-policy simulation stays separate (scenario 4 display contract)
   it("keeps a fail-closed operational failure as operational_failure with a separate synthetic consequence", async () => {
     const run = await runCli([
       "--transport", "stdio", "--method", "hooks/intercept", "--event", eventPath,
-      "--timeout-ms", "300", "--failure-policy", "fail-closed", "--format", "json",
+      "--timeout-ms", "300", "--failure-policy", "fail-closed",
       "--", process.execPath, FAKE_BACKEND, "--mode", "timeout",
     ]);
     assert.equal(run.code, 1);

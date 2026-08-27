@@ -3,11 +3,13 @@ import { join } from "node:path";
 import { before, describe, it } from "node:test";
 import { interceptEvent, tempDir, writeEventFile } from "./helpers/fixtures.js";
 import { FAKE_BACKEND, SCRIPTED_BACKEND } from "./helpers/paths.js";
-import { runCli } from "./helpers/run-cli.js";
+import { exportedPath, parseJsonStream, runCli } from "./helpers/run-cli.js";
 
 /**
- * Scenario 17: one attempt emits exactly one JSON object; multiple attempts
- * emit JSONL with attempt number, kind, and a complete result per record.
+ * Scenario 17 (as amended): JSON is the only output format. One attempt emits
+ * exactly one JSON object; multiple attempts emit JSONL with attempt number,
+ * kind, and a complete result per record. --pretty pretty-prints each record
+ * in sequence; --verbose adds full diagnostic evidence fields.
  */
 
 let dir: string;
@@ -19,10 +21,10 @@ before(() => {
 });
 
 describe("machine output shapes (scenario 17)", () => {
-  it("emits exactly one JSON object for one attempt, in the contract shape", async () => {
+  it("emits exactly one JSON object for one attempt, in the contract shape, by default", async () => {
     const run = await runCli([
       "--transport", "stdio", "--method", "hooks/intercept", "--event", eventPath,
-      "--timeout-ms", "3000", "--failure-policy", "fail-open", "--format", "json",
+      "--timeout-ms", "3000", "--failure-policy", "fail-open",
       "--", process.execPath, FAKE_BACKEND, "--mode", "no-effect",
     ]);
     assert.equal(run.code, 0, run.stderr);
@@ -33,11 +35,11 @@ describe("machine output shapes (scenario 17)", () => {
     });
   });
 
-  it("emits JSONL with one complete record per attempt for multiple attempts", async () => {
+  it("emits strict single-line JSONL with one complete record per attempt for multiple attempts", async () => {
     const stateFile = join(dir, "format-retry-state");
     const run = await runCli([
       "--transport", "stdio", "--method", "hooks/intercept", "--event", eventPath,
-      "--timeout-ms", "5000", "--failure-policy", "fail-open", "--format", "json", "--retry",
+      "--timeout-ms", "5000", "--failure-policy", "fail-open", "--retry",
       "--", process.execPath, SCRIPTED_BACKEND, "fail-once", stateFile,
     ]);
     assert.equal(run.code, 0, run.stderr);
@@ -59,11 +61,66 @@ describe("machine output shapes (scenario 17)", () => {
     assert.equal(records[1]?.result.classification, "no_effect", "the final record represents the final result");
   });
 
-  it("keeps every stdout line machine-parseable while diagnostics go to stderr", async () => {
+  it("pretty-prints a single attempt as one multi-line JSON object under --pretty", async () => {
+    const run = await runCli([
+      "--transport", "stdio", "--method", "hooks/intercept", "--event", eventPath,
+      "--timeout-ms", "3000", "--failure-policy", "fail-open", "--pretty",
+      "--", process.execPath, FAKE_BACKEND, "--mode", "no-effect",
+    ]);
+    assert.equal(run.code, 0, run.stderr);
+    assert.ok(run.stdout.trim().split("\n").length > 1, "pretty output spans multiple lines");
+    assert.deepEqual(JSON.parse(run.stdout), {
+      result: { classification: "no_effect", effects: [] },
+    });
+  });
+
+  it("pretty-prints each attempt record in sequence under --pretty for multiple attempts", async () => {
+    const stateFile = join(dir, "format-pretty-retry-state");
+    const run = await runCli([
+      "--transport", "stdio", "--method", "hooks/intercept", "--event", eventPath,
+      "--timeout-ms", "5000", "--failure-policy", "fail-open", "--retry", "--pretty",
+      "--", process.execPath, SCRIPTED_BACKEND, "fail-once", stateFile,
+    ]);
+    assert.equal(run.code, 0, run.stderr);
+    const records = parseJsonStream(run.stdout) as Array<{ attempt: number; kind: string; result: { classification: string } }>;
+    assert.equal(records.length, 2);
+    assert.equal(records[0]?.kind, "initial");
+    assert.equal(records[0]?.result.classification, "operational_failure");
+    assert.equal(records[1]?.kind, "retry");
+    assert.equal(records[1]?.result.classification, "no_effect");
+  });
+
+  it("adds full diagnostic evidence fields to the record under --verbose", async () => {
+    const run = await runCli([
+      "--transport", "stdio", "--method", "hooks/intercept", "--event", eventPath,
+      "--timeout-ms", "3000", "--failure-policy", "fail-open", "--verbose",
+      "--", process.execPath, FAKE_BACKEND, "--mode", "deny",
+    ]);
+    assert.equal(run.code, 0, run.stderr);
+    const lines = run.stdout.trim().split("\n");
+    assert.equal(lines.length, 1, "verbose output stays a single line without --pretty");
+    const record = JSON.parse(lines[0] as string) as {
+      result: { classification: string };
+      request: { raw: string; parsed: { method: string; id: string } };
+      response?: { raw: string };
+      transport: { transport: string };
+      timing: { startedAt: string; durationMs: number };
+      validation: unknown[];
+    };
+    assert.equal(record.result.classification, "explicit_deny");
+    assert.equal(record.request.parsed.method, "hooks/intercept");
+    assert.ok(record.request.raw.includes("\"jsonrpc\":\"2.0\""));
+    assert.ok(record.response?.raw !== undefined, "verbose includes the raw response");
+    assert.equal(record.transport.transport, "stdio");
+    assert.ok(typeof record.timing.durationMs === "number");
+    assert.ok(Array.isArray(record.validation));
+  });
+
+  it("keeps every stdout line machine-parseable while the export notice goes to stderr as JSON", async () => {
     const exportPath = join(dir, "format-export.json");
     const run = await runCli([
       "--transport", "stdio", "--method", "hooks/intercept", "--event", eventPath,
-      "--timeout-ms", "3000", "--failure-policy", "fail-open", "--format", "json",
+      "--timeout-ms", "3000", "--failure-policy", "fail-open",
       "--export", exportPath, "--verbose",
       "--", process.execPath, FAKE_BACKEND, "--mode", "deny",
     ]);
@@ -71,38 +128,21 @@ describe("machine output shapes (scenario 17)", () => {
     for (const line of run.stdout.trim().split("\n")) {
       JSON.parse(line);
     }
-    assert.match(run.stderr, /Diagnostic bundle written to /, "the actual export path is reported on stderr");
+    assert.equal(exportedPath(run.stderr), exportPath, "the actual export path is reported on stderr as a JSON object");
   });
 
-  it("writes text-mode success to stdout and failure envelopes to stderr", async () => {
-    const ok = await runCli([
-      "--transport", "stdio", "--method", "hooks/intercept", "--event", eventPath,
-      "--timeout-ms", "3000", "--failure-policy", "fail-open",
-      "--", process.execPath, FAKE_BACKEND, "--mode", "deny", "--reason", "Blocked by policy",
-    ]);
-    assert.equal(ok.code, 0);
-    assert.match(ok.stdout, /explicit_deny/);
-    assert.match(ok.stdout, /Blocked by policy/);
-
+  it("writes operational failures as result records on stdout with nothing on stderr", async () => {
     const failed = await runCli([
       "--transport", "stdio", "--method", "hooks/intercept", "--event", eventPath,
       "--timeout-ms", "3000", "--failure-policy", "fail-open",
       "--", process.execPath, FAKE_BACKEND, "--mode", "json-rpc-error",
     ]);
     assert.equal(failed.code, 1);
-    assert.equal(failed.stdout, "", "operational failures produce no stdout result in text mode");
-    assert.match(failed.stderr, /operational_failure/);
-    assert.match(failed.stderr, /JSON_RPC_ERROR/);
-  });
-
-  it("never labels no-effect as allow", async () => {
-    const run = await runCli([
-      "--transport", "stdio", "--method", "hooks/intercept", "--event", eventPath,
-      "--timeout-ms", "3000", "--failure-policy", "fail-open",
-      "--", process.execPath, FAKE_BACKEND, "--mode", "no-effect",
-    ]);
-    assert.equal(run.code, 0);
-    assert.ok(!/\ballow(ed)?\b/i.test(run.stdout.replace(/not "allow"/, "")), run.stdout);
-    assert.match(run.stdout, /does not bypass/);
+    const record = JSON.parse(failed.stdout.trim()) as {
+      result: { classification: string; error?: { code: string } };
+    };
+    assert.equal(record.result.classification, "operational_failure");
+    assert.equal(record.result.error?.code, "JSON_RPC_ERROR");
+    assert.equal(failed.stderr.trim(), "", "no duplicate failure envelope on stderr");
   });
 });

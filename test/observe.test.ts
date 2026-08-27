@@ -32,7 +32,6 @@ function stdioArgs(mode: string, connectTimeoutMs = 3000): string[] {
     "--method", "hooks/observe",
     "--event", eventPath,
     "--connect-timeout-ms", String(connectTimeoutMs),
-    "--format", "json",
     "--", process.execPath, SCRIPTED_BACKEND, mode,
   ];
 }
@@ -43,7 +42,6 @@ function httpArgs(): string[] {
     "--method", "hooks/observe",
     "--event", eventPath,
     "--connect-timeout-ms", "3000",
-    "--format", "json",
     server.url,
   ];
 }
@@ -82,7 +80,7 @@ describe("observe over stdio (scenarios 11, 12)", () => {
   it("classifies a launch failure as notification_delivery_failure", async () => {
     const run = await runCli([
       "--transport", "stdio", "--method", "hooks/observe", "--event", eventPath,
-      "--connect-timeout-ms", "3000", "--format", "json",
+      "--connect-timeout-ms", "3000",
       "--", "/nonexistent/definitely-missing-backend",
     ]);
     assert.equal(run.code, 1);

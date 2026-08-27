@@ -28,3 +28,28 @@ export function runCli(args: string[], options: { env?: Record<string, string>; 
     child.stdin.end(options.stdin ?? "");
   });
 }
+
+/** Extract the actual diagnostic bundle path from the JSON export notice on stderr. */
+export function exportedPath(stderr: string): string {
+  for (const line of stderr.trim().split("\n")) {
+    try {
+      const parsed = JSON.parse(line) as { export?: { path?: string } };
+      if (typeof parsed.export?.path === "string") return parsed.export.path;
+    } catch {
+      // Non-JSON line; keep scanning.
+    }
+  }
+  throw new Error(`No JSON export notice found on stderr: ${stderr}`);
+}
+
+/**
+ * Parse a stream of concatenated JSON records: single-line JSONL, or a
+ * pretty-printed sequence where each record starts with "{" at column 0.
+ */
+export function parseJsonStream(text: string): unknown[] {
+  return text
+    .split(/^(?=\{)/m)
+    .map((chunk) => chunk.trim())
+    .filter((chunk) => chunk.length > 0)
+    .map((chunk) => JSON.parse(chunk) as unknown);
+}

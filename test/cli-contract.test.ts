@@ -56,7 +56,7 @@ describe("usage rejections (scenario 16)", () => {
     { name: "stdio with --bearer-token-env", args: [...interceptBase(), "--bearer-token-env", "TOKEN", ...CMD], rule: "bearer-token-env-rejected-for-stdio" },
     { name: "malformed --header", args: ["--transport", "http", "--method", "hooks/intercept", "--event", eventPath, "--timeout-ms", "1000", "--failure-policy", "fail-open", "--header", "no-colon-here", "http://127.0.0.1:1/hooks"], rule: "header-invalid" },
     { name: "literal bearer token in --header", args: ["--transport", "http", "--method", "hooks/intercept", "--event", eventPath, "--timeout-ms", "1000", "--failure-policy", "fail-open", "--header", "Authorization: Bearer sekrit", "http://127.0.0.1:1/hooks"], rule: "header-literal-bearer" },
-    { name: "invalid --format", args: [...interceptBase(), "--format", "xml", ...CMD], rule: "format-invalid" },
+    { name: "removed --format option", args: [...interceptBase(), "--format", "json", ...CMD], rule: "unknown-option" },
     { name: "unknown option", args: [...interceptBase(), "--frobnicate", ...CMD], rule: "unknown-option" },
   ];
 
@@ -79,10 +79,10 @@ describe("usage rejections (scenario 16)", () => {
     assert.ok(run.stderr.includes("bearer-token-env-unset"), run.stderr);
   });
 
-  it("emits usage errors as JSON envelopes on stderr under --format json", async () => {
+  it("emits usage errors as JSON envelopes on stderr", async () => {
     const run = await runCli([
       "--transport", "stdio", "--method", "hooks/observe", "--event", eventPath,
-      "--timeout-ms", "1000", "--format", "json", ...CMD,
+      "--timeout-ms", "1000", ...CMD,
     ]);
     assert.equal(run.code, 2);
     assert.equal(run.stdout, "");
@@ -128,7 +128,7 @@ describe("event source validation before transport activity", () => {
 
   it("accepts an event from stdin with --event -", async () => {
     const run = await runCli(
-      ["--transport", "stdio", "--method", "hooks/intercept", "--event", "-", "--timeout-ms", "1000", "--failure-policy", "fail-open", "--format", "json", "--", "/nonexistent/backend"],
+      ["--transport", "stdio", "--method", "hooks/intercept", "--event", "-", "--timeout-ms", "1000", "--failure-policy", "fail-open", "--", "/nonexistent/backend"],
       { stdin: JSON.stringify(interceptEvent()) },
     );
     // The event loads and validates from stdin; the run then fails only at the

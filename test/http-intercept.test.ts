@@ -5,7 +5,7 @@ import { after, before, describe, it } from "node:test";
 import { httpFixture, tempDir, writeEventFile } from "./helpers/fixtures.js";
 import { startHttpServer, type TestHttpServer } from "./helpers/http-server.js";
 import { FIXTURES_DIR } from "./helpers/paths.js";
-import { runCli } from "./helpers/run-cli.js";
+import { exportedPath, runCli } from "./helpers/run-cli.js";
 import type { JsonObject } from "@agenthooksprotocol/sdk";
 
 interface MachineResult {
@@ -43,7 +43,6 @@ function args(extra: string[] = [], timeoutMs = 3000, url = ""): string[] {
     "--event", eventPath,
     "--timeout-ms", String(timeoutMs),
     "--failure-policy", "fail-open",
-    "--format", "json",
     ...extra,
     url === "" ? server.url : url,
   ];
@@ -194,8 +193,7 @@ describe("HTTP deadline and late response (scenario 7)", () => {
     const record = parseSingle(run.stdout);
     assert.equal(record.result.classification, "operational_failure");
     assert.equal(record.result.error?.code, "TIMEOUT");
-    const actualPath = /Diagnostic bundle written to (.+)/.exec(run.stderr)?.[1] as string;
-    const bundle = JSON.parse(readFileSync(actualPath, "utf8")) as {
+    const bundle = JSON.parse(readFileSync(exportedPath(run.stderr), "utf8")) as {
       attempts: Array<{
         response?: { raw: string; late?: boolean };
         transport: { responseLate?: boolean; status?: number };
@@ -234,10 +232,9 @@ describe("HTTP bearer authentication (scenario 19)", () => {
     assert.equal(request?.headers["x-test-header"], "hello");
 
     // …while no Inspector output contains any trace of it.
-    assert.ok(!run.stdout.includes(token), "stdout must not contain the token");
-    assert.ok(!run.stderr.includes(token), "stderr (including verbose evidence) must not contain the token");
-    const actualPath = /Diagnostic bundle written to (.+)/.exec(run.stderr)?.[1] as string;
-    const bundleText = readFileSync(actualPath, "utf8");
+    assert.ok(!run.stdout.includes(token), "stdout (including verbose evidence) must not contain the token");
+    assert.ok(!run.stderr.includes(token), "stderr must not contain the token");
+    const bundleText = readFileSync(exportedPath(run.stderr), "utf8");
     assert.ok(!bundleText.includes(token), "the exported bundle must not contain the token");
 
     // Other debugger evidence is preserved, with the redaction marker in place.

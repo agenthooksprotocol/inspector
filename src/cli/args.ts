@@ -19,8 +19,10 @@ export interface CliConfig {
   retries: number;
   duplicateDelivery: boolean;
   exportPath?: string;
+  /** Include full diagnostic evidence fields in the output records. */
   verbose: boolean;
-  format: "text" | "json";
+  /** Pretty-print every JSON record (default is strict single-line JSON/JSONL). */
+  pretty: boolean;
 }
 
 export const USAGE = `Usage:
@@ -45,8 +47,11 @@ Options:
   --retry [count]                       retry after operational failure within the original deadline (default 1)
   --duplicate-delivery                  deliberate duplicate delivery test; mutually exclusive with --retry
   --export <path>                       write a full diagnostic bundle (never overwrites)
-  --verbose                             detailed evidence on stderr
-  --format json                         machine output: one JSON object, or JSONL for multiple attempts
+  --verbose                             include full diagnostic evidence fields in the JSON output records
+  --pretty                              pretty-print JSON output (each attempt record in sequence)
+
+Output is always JSON: one object for a single attempt, JSONL (one complete
+object per attempt with attempt number and kind) for multiple attempts.
 `;
 
 const KNOWN_OPTIONS = {
@@ -62,7 +67,7 @@ const KNOWN_OPTIONS = {
   "duplicate-delivery": { type: "boolean" },
   export: { type: "string" },
   verbose: { type: "boolean" },
-  format: { type: "string" },
+  pretty: { type: "boolean" },
   help: { type: "boolean" },
 } as const;
 
@@ -181,11 +186,6 @@ export function parseCliArgs(argv: string[]): CliConfig {
   }
   const eventSource = requireValue(events[0], "--event");
 
-  const format = (values.format as string | undefined) ?? "text";
-  if (format !== "text" && format !== "json") {
-    throw new UsageError("format-invalid", `--format must be json (or omitted for text), got: ${format}`);
-  }
-
   // Target form: stdio command after `--`, or exactly one positional URL.
   const positionals = parsed.positionals;
   if (transport === "stdio") {
@@ -277,7 +277,7 @@ export function parseCliArgs(argv: string[]): CliConfig {
     retries,
     duplicateDelivery,
     verbose: values.verbose === true,
-    format,
+    pretty: values.pretty === true,
     ...(timeoutMs === undefined ? {} : { timeoutMs }),
     ...(connectTimeoutMs === undefined ? {} : { connectTimeoutMs }),
     ...(failurePolicy === undefined ? {} : { failurePolicy }),

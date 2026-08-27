@@ -30,7 +30,6 @@ function baseArgs(): string[] {
     "--event", eventPath,
     "--timeout-ms", "5000",
     "--failure-policy", "fail-open",
-    "--format", "json",
   ];
 }
 
@@ -86,7 +85,7 @@ describe("conforming retry (scenario 13)", () => {
   it("does not retry once the original deadline has been consumed", async () => {
     const run = await runCli([
       "--transport", "stdio", "--method", "hooks/intercept", "--event", eventPath,
-      "--timeout-ms", "300", "--failure-policy", "fail-open", "--format", "json", "--retry", "3",
+      "--timeout-ms", "300", "--failure-policy", "fail-open", "--retry", "3",
       "--", process.execPath, FAKE_BACKEND, "--mode", "timeout",
     ]);
     assert.equal(run.code, 1);
@@ -116,15 +115,15 @@ describe("duplicate delivery test (scenario 14)", () => {
     assert.equal(delivered[0], delivered[1], "duplicate delivery reuses the exact event content and IDs");
   });
 
-  it("labels the run as a duplicate delivery test, not a retry", async () => {
+  it("labels the attempts as a duplicate delivery test, never as a retry", async () => {
     const run = await runCli([
       "--transport", "stdio", "--method", "hooks/intercept", "--event", eventPath,
       "--timeout-ms", "5000", "--failure-policy", "fail-open", "--duplicate-delivery",
       "--", process.execPath, FAKE_BACKEND, "--mode", "deny",
     ]);
     assert.equal(run.code, 0);
-    assert.match(run.stderr, /Duplicate delivery test/);
-    assert.match(run.stderr, /not simulated conforming harness behavior/);
-    assert.ok(!/\bretry\b/.test(run.stderr), "duplicate delivery must not be labeled retry");
+    const kinds = run.stdout.trim().split("\n").map((line) => (JSON.parse(line) as AttemptLine).kind);
+    assert.deepEqual(kinds, ["initial", "duplicate"]);
+    assert.ok(!kinds.includes("retry"), "duplicate delivery must not be labeled retry");
   });
 });

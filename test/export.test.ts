@@ -4,7 +4,7 @@ import { basename, join } from "node:path";
 import { before, describe, it } from "node:test";
 import { interceptEvent, tempDir, writeEventFile } from "./helpers/fixtures.js";
 import { FAKE_BACKEND, SCRIPTED_BACKEND } from "./helpers/paths.js";
-import { runCli } from "./helpers/run-cli.js";
+import { exportedPath, runCli } from "./helpers/run-cli.js";
 import { diagnosticSchemaValidator } from "./helpers/schemas.js";
 
 interface Bundle {
@@ -36,11 +36,7 @@ before(() => {
   eventRaw = readFileSync(eventPath, "utf8");
 });
 
-function exportPathFrom(stderr: string): string {
-  const match = /Diagnostic bundle written to (.+)/.exec(stderr);
-  assert.ok(match !== null, `no export path reported: ${stderr}`);
-  return (match as RegExpExecArray)[1] as string;
-}
+const exportPathFrom = exportedPath;
 
 describe("diagnostic bundle export (scenario 15)", () => {
   it("exports a self-describing bundle with the captured exchange and complete final result", async () => {
@@ -116,7 +112,7 @@ describe("diagnostic bundle export (scenario 15)", () => {
       "--", process.execPath, FAKE_BACKEND, "--mode", "no-effect",
     ]);
     assert.equal(run.code, 0);
-    assert.ok(!run.stderr.includes("Diagnostic bundle"));
+    assert.equal(run.stderr.trim(), "", "no export notice may appear without --export");
     assert.deepEqual(readdirSync(cleanDir), [basename(cleanEvent)], "no diagnostic files may be created without --export");
   });
 });

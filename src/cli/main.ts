@@ -6,8 +6,7 @@ import { loadEvent, validateInterceptEvent, type Finding, type LoadedEvent } fro
 import { validateObserveEvent } from "../core/observe-validation.js";
 import { buildInterceptRequest, buildObserveNotification, INTERCEPT_METHOD } from "../core/protocol.js";
 import { parseCliArgs, USAGE, type CliConfig } from "./args.js";
-import { renderJsonLines } from "./render-json.js";
-import { renderAttemptProgress, renderFinalText, renderVerbose } from "./render-text.js";
+import { renderErrorEnvelope, renderRecords, stringifyRecord } from "./render-json.js";
 
 const EXIT_OK = 0;
 const EXIT_OPERATIONAL_FAILURE = 1;
@@ -21,20 +20,10 @@ function printOut(line: string): void {
   process.stdout.write(`${line}\n`);
 }
 
-/** Usage/configuration rejection: stable envelope on stderr, exit code 2. */
-function exitUsage(error: InspectorError, format: "text" | "json", findings: Finding[] = []): never {
-  if (format === "json") {
-    const envelope: Record<string, unknown> = { error: { ...error.toEnvelope(), ...(error instanceof UsageError ? { rule: error.rule } : {}) } };
-    if (findings.length > 0) envelope.findings = findings;
-    printErr(JSON.stringify(envelope));
-  } else {
-    const rule = error instanceof UsageError ? ` [${error.rule}]` : "";
-    printErr(`Error [${error.code}]${rule}: ${error.message}`);
-    for (const finding of findings) {
-      printErr(`finding: ${finding.path.length > 0 ? `${finding.path}: ` : ""}${finding.message} [${finding.code}, ${finding.requirementId}]`);
-    }
-    printErr("Run ahp-inspector --help for usage.");
-  }
+/** Usage/configuration rejection: structured JSON envelope on stderr, exit code 2. */
+function exitUsage(error: InspectorError, pretty: boolean, findings: Finding[] = []): never {
+  const envelope = { ...error.toEnvelope(), ...(error instanceof UsageError ? { rule: error.rule } : {}) };
+  printErr(renderErrorEnvelope(envelope, findings, pretty));
   process.exit(EXIT_USAGE);
 }
 
@@ -80,8 +69,7 @@ async function main(): Promise<number> {
       return EXIT_OK;
     }
     if (error instanceof InspectorError) {
-      const format = process.argv.includes("json") && process.argv.includes("--format") ? "json" : "text";
-      exitUsage(error, format);
+      exitUsage(error, process.argv.includes("--pretty"));
     }
     throw error;
   }
@@ -91,7 +79,7 @@ async function main(): Promise<number> {
   try {
     event = loadEvent(config.eventSource);
   } catch (error) {
-    if (error instanceof InspectorError) exitUsage(error, config.format);
+    if (error instanceof InspectorError) exitUsage(error, config.pretty);
     throw error;
   }
 
@@ -101,7 +89,7 @@ async function main(): Promise<number> {
   if (findings.length > 0) {
     exitUsage(
       new InspectorError("INVALID_CONFIG", `The event is not a valid ${config.method === INTERCEPT_METHOD ? "tool.before intercept" : "observe"} event; see findings`, "event-validation", false),
-      config.format,
+      config.pretty,
       findings,
     );
   }
@@ -117,12 +105,11 @@ async function main(): Promise<number> {
     const name = config.http.bearerTokenEnv;
     const value = process.env[name];
     if (value === undefined || value.length === 0) {
-      exitUsage(new UsageError("bearer-token-env-unset", `Environment variable ${name} named by --bearer-token-env is not set`), config.format);
+      exitUsage(new UsageError("bearer-token-env-unset", `Environment variable ${name} named by --bearer-token-env is not set`), config.pretty);
     }
   }
 
   const target = engineTarget(config);
-  const showProgress = config.format === "text" && (config.retries > 0 || config.duplicateDelivery);
 
   let outcome: RunOutcome;
   if (config.method === INTERCEPT_METHOD) {
@@ -134,7 +121,6 @@ async function main(): Promise<number> {
       failurePolicy: config.failurePolicy as NonNullable<CliConfig["failurePolicy"]>,
       retries: config.retries,
       duplicateDelivery: config.duplicateDelivery,
-      ...(showProgress ? { onAttempt: (record) => printErr(renderAttemptProgress(record)) } : {}),
     });
   } else {
     outcome = await runObserve({
@@ -144,15 +130,8 @@ async function main(): Promise<number> {
     });
   }
 
-  if (config.format === "json") {
-    for (const line of renderJsonLines(outcome)) printOut(line);
-  } else {
-    const text = renderFinalText(outcome, config.duplicateDelivery);
-    for (const line of text.stdout) printOut(line);
-    for (const line of text.stderr) printErr(line);
-  }
-  if (config.verbose) {
-    for (const line of renderVerbose(outcome)) printErr(line);
+  for (const record of renderRecords(outcome, { pretty: config.pretty, verbose: config.verbose })) {
+    printOut(record);
   }
 
   let exportFailed = false;
@@ -166,10 +145,10 @@ async function main(): Promise<number> {
     });
     try {
       const actualPath = writeBundle(bundle, config.exportPath);
-      printErr(`Diagnostic bundle written to ${actualPath}`);
+      printErr(stringifyRecord({ export: { path: actualPath } }, config.pretty));
     } catch (error) {
       if (error instanceof InspectorError) {
-        printErr(`Error [${error.code}] phase=${error.phase}: ${error.message}`);
+        printErr(renderErrorEnvelope(error.toEnvelope(), [], config.pretty));
         exportFailed = true;
       } else {
         throw error;
@@ -189,7 +168,7 @@ main().then(
     process.exitCode = code;
   },
   (error: unknown) => {
-    printErr(`Error [IO_ERROR]: ${error instanceof Error ? (error.stack ?? error.message) : String(error)}`);
+    printErr(JSON.stringify({ error: { code: "IO_ERROR", message: error instanceof Error ? (error.stack ?? error.message) : String(error), phase: "setup", retryable: false } }));
     process.exitCode = EXIT_OPERATIONAL_FAILURE;
   },
 );

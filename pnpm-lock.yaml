@@ -9,12 +9,12 @@ importers:
   .:
     dependencies:
       '@agenthooksprotocol/sdk':
-        specifier: link:../typescript-sdk/packages/sdk
-        version: link:../typescript-sdk/packages/sdk
+        specifier: link:.deps/typescript-sdk/packages/sdk
+        version: link:.deps/typescript-sdk/packages/sdk
     devDependencies:
       '@agenthooksprotocol/testing':
-        specifier: link:../typescript-sdk/packages/testing
-        version: link:../typescript-sdk/packages/testing
+        specifier: link:.deps/typescript-sdk/packages/testing
+        version: link:.deps/typescript-sdk/packages/testing
       '@types/node':
         specifier: ^24.0.0
         version: 24.13.3

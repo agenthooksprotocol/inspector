@@ -154,12 +154,20 @@ export function parseCliArgs(argv: string[]): CliConfig {
     throw new UsageError("help", USAGE);
   }
 
-  const transport = requireValue(values.transport as string | undefined, "--transport");
+  const transportRaw = values.transport as string | undefined;
+  if (transportRaw === undefined) {
+    throw new UsageError("transport-required", "--transport stdio|http is required");
+  }
+  const transport = requireValue(transportRaw, "--transport");
   if (transport !== "stdio" && transport !== "http") {
     throw new UsageError("transport-invalid", `--transport must be stdio or http, got: ${transport}`);
   }
 
-  const method = requireValue(values.method as string | undefined, "--method");
+  const methodRaw = values.method as string | undefined;
+  if (methodRaw === undefined) {
+    throw new UsageError("method-required", `--method ${INTERCEPT_METHOD}|${OBSERVE_METHOD} is required`);
+  }
+  const method = requireValue(methodRaw, "--method");
   if (method !== INTERCEPT_METHOD && method !== OBSERVE_METHOD) {
     throw new UsageError("method-invalid", `--method must be ${INTERCEPT_METHOD} or ${OBSERVE_METHOD}, got: ${method}`);
   }

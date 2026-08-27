@@ -60,8 +60,14 @@ export interface HttpEvidence {
 
 export type TransportEvidence = StdioEvidence | HttpEvidence;
 
-/** Bounded drain window after deadline expiry for recording late responses. */
-export const LATE_DRAIN_MS = 150;
+/**
+ * Bounded drain window after deadline expiry for recording late responses.
+ * Overridable through AHP_INSPECTOR_LATE_DRAIN_MS (used by integration tests
+ * to observe late responses deterministically); the result is always fixed
+ * before the drain starts, so the window never changes a classification.
+ */
+const drainOverride = Number(process.env.AHP_INSPECTOR_LATE_DRAIN_MS ?? "");
+export const LATE_DRAIN_MS = Number.isSafeInteger(drainOverride) && drainOverride > 0 ? drainOverride : 150;
 
 export const EVIDENCE_TEXT_LIMIT = 64 * 1024;
 

@@ -1,6 +1,6 @@
 # AHP Inspector (Stage 1)
 
-`ahp-inspector` is a one-shot CLI harness client for testing one [Agent Hooks Protocol](../agent-hooks-protocol) backend. Each invocation loads one AHP event, sends it over a real stdio or HTTP transport, validates and classifies the exchange, prints a human- or machine-readable result, and can export a full diagnostic bundle.
+`ahp-inspector` is a one-shot CLI harness client for testing one [Agent Hooks Protocol](../agent-hooks-protocol) backend. Each invocation loads one AHP event, sends it over a real stdio or HTTP transport, validates and classifies the exchange, prints a machine-readable JSON result, and can export a full diagnostic bundle.
 
 - **Protocol revision:** pinned to the immutable AHP artifact revision `0.1.0-draft.1` (protocol version `0.1`).
 - **Scope:** the Inspector exercises the policy conversation only. It never executes the tool represented by an event, and it never proves that a real harness enforced a result.
@@ -47,12 +47,12 @@ Every invocation is one-shot: one ad hoc target, one event, one method, optional
 | `--retry [count]` | Retry after an operational failure, only while the original deadline remains (default one retry). Never retries a no-effect or deny result. Mutually exclusive with `--duplicate-delivery`. |
 | `--duplicate-delivery` | Exactly one deliberate replay of the identical frame (same event, JSON-RPC, session, and call IDs), each delivery with a fresh deadline. A backend diagnostic, not simulated harness behavior. |
 | `--export <path>` | Write the full diagnostic bundle. Never overwrites: on collision a random suffix is appended and the actual path is reported on stderr. |
-| `--verbose` | Detailed protocol, transport, validation, and timing evidence on stderr. |
-| `--format json` | Machine output on stdout. |
+| `--verbose` | Include full diagnostic evidence (raw/parsed request and response, transport, timing, validation findings) as additional fields in the JSON output records. |
+| `--pretty` | Pretty-print the JSON output. For multiple attempts, each record is pretty-printed in sequence; without it, output is strict single-line JSON/JSONL. |
 
 **Exit codes:** `0` valid result (no effect, explicit deny, or notification sent), `1` operational failure, `2` usage/configuration error. Failure categories (usage, target unavailable, deadline, invalid protocol response, backend JSON-RPC error) are distinguished by the structured `error.code` and `phase`, not by exit code.
 
-**Streams:** successful results go to stdout; usage errors, operational failure envelopes, verbose evidence, findings, and the actual export path go to stderr. With `--format json`, every attempt record goes to stdout so the stream stays parseable.
+**Streams:** all output is JSON. Attempt records — including operational failures — go to stdout so the stream stays parseable. stderr carries only structured JSON side-channel objects: usage/configuration error envelopes (`{"error":{...}}`, optionally with `findings`), the actual export path notice (`{"export":{"path":"..."}}`), and export failure envelopes. Both streams honor `--pretty`.
 
 ## Terminology (worth keeping straight)
 
@@ -84,12 +84,13 @@ node dist/src/cli/main.js \
   -- node node_modules/@agenthooksprotocol/testing/dist/src/fake-backend.js --mode no-effect
 ```
 
-```text
-Result: no_effect — the backend returned an empty effects list (no objection).
-Note: no_effect is not "allow". It does not bypass other interceptors, host permissions, approval, or sandboxing.
+```json
+{"result":{"classification":"no_effect","effects":[]}}
 ```
 
-Try a denial (`--mode deny`), a timeout (`--mode timeout`), a malformed response (`--mode malformed-json`), or an ID mismatch (`--mode id-mismatch`). Add `--verbose` to see raw frames, backend stderr, process state, and timing; add `--export /tmp/bundle.json` to capture everything.
+Remember `no_effect` is not "allow": it does not bypass other interceptors, host permissions, approval, or sandboxing.
+
+Try a denial (`--mode deny`), a timeout (`--mode timeout`), a malformed response (`--mode malformed-json`), or an ID mismatch (`--mode id-mismatch`). Add `--pretty` to pretty-print the JSON, `--verbose` to include raw frames, backend stderr, process state, and timing in the record, and `--export /tmp/bundle.json` to capture everything.
 
 ## HTTP walkthrough (sample server)
 
@@ -129,7 +130,7 @@ Evidence and exports record the header as `Bearer [redacted:AHP_POLICY_TOKEN]`.
 
 ## Machine output
 
-One attempt emits exactly one JSON object on stdout:
+JSON is the only output format. One attempt emits exactly one JSON object on stdout:
 
 ```json
 {"result":{"classification":"no_effect","effects":[]}}
@@ -141,6 +142,8 @@ Multiple attempts (retry or duplicate delivery) emit JSONL — one complete reco
 {"attempt":0,"kind":"initial","result":{"classification":"operational_failure","error":{"code":"IO_ERROR","message":"Backend process exited with status 7; a per-event backend signals a completed exchange with exit status 0 (working-draft §17.3)","phase":"await-response","retryable":true}}}
 {"attempt":1,"kind":"retry","result":{"classification":"no_effect","effects":[]}}
 ```
+
+`--pretty` pretty-prints each record in sequence (like `jq` over a JSONL stream), and `--verbose` adds `request`, `response`, `transport`, `timing`, and `validation` evidence fields to every record.
 
 Operational error envelopes always carry a stable `code` (the SDK's operational codes plus `USAGE`, `TARGET_UNAVAILABLE`, `EXPORT_IO`, `UNEXPECTED_RESPONSE`), a human-readable `message`, the failure `phase`, and a `retryable` indicator. A simulated policy consequence, when present, is a separate top-level `simulation` object:
 
@@ -168,7 +171,7 @@ src/core/     protocol core — no CLI presentation imports
   transport/stdio.ts      per_event spawn, NDJSON framing, evidence capture
   transport/http.ts       POST, manual redirects, bearer redaction, evidence
   diagnostic.ts           bundle assembly and collision-safe export
-src/cli/      argument grammar, text/JSON renderers, orchestration
+src/cli/      argument grammar, JSON renderer, orchestration
 test/         node:test integration suites over real subprocesses and HTTP
 ```
 

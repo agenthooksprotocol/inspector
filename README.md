@@ -23,7 +23,7 @@ pnpm build
 pnpm test           # runs the integration suite on the compiled output
 ```
 
-The binary is `dist/src/cli/main.js`, linked as `ahp-inspector` (`pnpm exec ahp-inspector`, or `node dist/src/cli/main.js`).
+The binary is `dist/src/cli/main.js`, declared as `ahp-inspector`. Run it as `node dist/src/cli/main.js …`, or put `ahp-inspector` on your PATH with `pnpm link --global`. The walkthroughs below use the direct form.
 
 ## CLI contract
 
@@ -78,7 +78,7 @@ fs.writeFileSync("/tmp/event.json", JSON.stringify(req.params.event, null, 2));
 '
 
 # A clean no-effect exchange
-pnpm exec ahp-inspector \
+node dist/src/cli/main.js \
   --transport stdio --method hooks/intercept \
   --event /tmp/event.json --timeout-ms 1000 --failure-policy fail-open \
   -- node node_modules/@agenthooksprotocol/testing/dist/src/fake-backend.js --mode no-effect
@@ -109,7 +109,7 @@ http.createServer((req, res) => {
 }).listen(8790, "127.0.0.1");
 ' &
 
-pnpm exec ahp-inspector \
+node dist/src/cli/main.js \
   --transport http --method hooks/intercept \
   --event /tmp/event.json --timeout-ms 1000 --failure-policy fail-closed \
   http://127.0.0.1:8790/hooks
@@ -118,7 +118,7 @@ pnpm exec ahp-inspector \
 Remote endpoints must use `https`; plain `http` is accepted only for loopback addresses. Bearer authentication comes from an environment variable, never a literal token:
 
 ```bash
-AHP_POLICY_TOKEN=... pnpm exec ahp-inspector \
+AHP_POLICY_TOKEN=... node dist/src/cli/main.js \
   --transport http --method hooks/intercept \
   --event /tmp/event.json --timeout-ms 1000 --failure-policy fail-closed \
   --bearer-token-env AHP_POLICY_TOKEN \

@@ -1,0 +1,208 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agenthooksprotocol.org/inspector/schemas/diagnostic/0.1.0.json",
+  "title": "AHP Inspector diagnostic bundle",
+  "description": "Stable self-describing diagnostic bundle written by `ahp-inspector --export`. Versioned independently of the AHP protocol revision. Resolved bearer-token values never appear anywhere in the bundle.",
+  "type": "object",
+  "required": ["schemaVersion", "inspector", "protocol", "target", "event", "attempts", "result"],
+  "properties": {
+    "schemaVersion": { "const": "ahp-inspector-diagnostic/0.1" },
+    "inspector": {
+      "type": "object",
+      "required": ["version"],
+      "properties": { "version": { "type": "string" } }
+    },
+    "protocol": {
+      "type": "object",
+      "required": ["name", "revision"],
+      "properties": {
+        "name": { "const": "AHP" },
+        "revision": { "const": "0.1.0-draft.1" }
+      }
+    },
+    "target": {
+      "type": "object",
+      "required": ["transport", "method"],
+      "properties": {
+        "transport": { "enum": ["stdio", "http"] },
+        "method": { "enum": ["hooks/intercept", "hooks/observe"] },
+        "command": { "type": "string" },
+        "args": { "type": "array", "items": { "type": "string" } },
+        "lifecycle": { "const": "per_event" },
+        "url": { "type": "string" },
+        "headers": { "type": "object", "additionalProperties": { "type": "string" } },
+        "bearerTokenEnv": { "type": "string" },
+        "timeoutMs": { "type": "integer", "minimum": 1 },
+        "connectTimeoutMs": { "type": "integer", "minimum": 1 },
+        "failurePolicy": { "enum": ["fail-open", "fail-closed"] },
+        "retries": { "type": "integer", "minimum": 0 },
+        "duplicateDelivery": { "type": "boolean" }
+      }
+    },
+    "event": {
+      "type": "object",
+      "required": ["raw", "parsed"],
+      "properties": {
+        "raw": { "type": "string" },
+        "parsed": { "type": "object" }
+      }
+    },
+    "attempts": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/attempt" }
+    },
+    "result": { "$ref": "#/$defs/result" },
+    "simulation": { "$ref": "#/$defs/simulation" }
+  },
+  "$defs": {
+    "attempt": {
+      "type": "object",
+      "required": ["number", "kind", "request", "transport", "timing", "validation", "result"],
+      "properties": {
+        "number": { "type": "integer", "minimum": 0 },
+        "kind": { "enum": ["initial", "retry", "duplicate"] },
+        "request": {
+          "type": "object",
+          "required": ["raw", "parsed"],
+          "properties": {
+            "raw": { "type": "string" },
+            "parsed": { "type": "object" }
+          }
+        },
+        "response": {
+          "type": "object",
+          "required": ["raw"],
+          "properties": {
+            "raw": { "type": "string" },
+            "parsed": {},
+            "late": { "type": "boolean" }
+          }
+        },
+        "transport": { "$ref": "#/$defs/transportEvidence" },
+        "timing": { "$ref": "#/$defs/timing" },
+        "validation": { "type": "array", "items": { "$ref": "#/$defs/finding" } },
+        "result": { "$ref": "#/$defs/result" }
+      }
+    },
+    "transportEvidence": {
+      "type": "object",
+      "required": ["transport"],
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["transport", "lifecycle", "command", "args", "spawned", "killedByInspector", "frames", "stdout", "stderr"],
+          "properties": {
+            "transport": { "const": "stdio" },
+            "lifecycle": { "const": "per_event" },
+            "command": { "type": "string" },
+            "args": { "type": "array", "items": { "type": "string" } },
+            "spawned": { "type": "boolean" },
+            "pid": { "type": "integer" },
+            "exitCode": { "type": ["integer", "null"] },
+            "signal": { "type": ["string", "null"] },
+            "killedByInspector": { "type": "boolean" },
+            "frames": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["raw", "atMs", "late"],
+                "properties": {
+                  "raw": { "type": "string" },
+                  "atMs": { "type": "number" },
+                  "late": { "type": "boolean" }
+                }
+              }
+            },
+            "stdout": { "type": "string" },
+            "stderr": { "type": "string" },
+            "stderrTruncated": { "type": "boolean" },
+            "stdoutTruncated": { "type": "boolean" },
+            "framingError": { "type": "string" }
+          }
+        },
+        {
+          "type": "object",
+          "required": ["transport", "url", "method", "requestHeaders"],
+          "properties": {
+            "transport": { "const": "http" },
+            "url": { "type": "string" },
+            "method": { "const": "POST" },
+            "requestHeaders": { "type": "object", "additionalProperties": { "type": "string" } },
+            "status": { "type": "integer" },
+            "statusText": { "type": "string" },
+            "responseHeaders": { "type": "object", "additionalProperties": { "type": "string" } },
+            "responseBody": { "type": "string" },
+            "responseLate": { "type": "boolean" }
+          }
+        }
+      ]
+    },
+    "timing": {
+      "type": "object",
+      "required": ["startedAt", "endedAt", "durationMs", "deadlineExceeded", "lateResponse"],
+      "properties": {
+        "startedAt": { "type": "string" },
+        "endedAt": { "type": "string" },
+        "durationMs": { "type": "number", "minimum": 0 },
+        "deadlineAt": { "type": "string" },
+        "deadlineExceeded": { "type": "boolean" },
+        "lateResponse": { "type": "boolean" }
+      }
+    },
+    "finding": {
+      "type": "object",
+      "required": ["path", "message", "code", "requirementId"],
+      "properties": {
+        "path": { "type": "string" },
+        "message": { "type": "string" },
+        "code": { "type": "string" },
+        "requirementId": { "type": "string" }
+      }
+    },
+    "result": {
+      "type": "object",
+      "required": ["classification"],
+      "properties": {
+        "classification": {
+          "enum": ["no_effect", "explicit_deny", "operational_failure", "notification_sent", "notification_delivery_failure"]
+        },
+        "effects": {
+          "type": "array",
+          "maxItems": 1,
+          "items": {
+            "type": "object",
+            "required": ["type", "reason"],
+            "properties": {
+              "type": { "const": "deny" },
+              "reason": { "type": "string" },
+              "code": { "type": "string" },
+              "extensions": { "type": "object" }
+            }
+          }
+        },
+        "error": {
+          "type": "object",
+          "required": ["code", "message", "phase", "retryable"],
+          "properties": {
+            "code": { "type": "string" },
+            "message": { "type": "string" },
+            "phase": { "type": "string" },
+            "retryable": { "type": "boolean" }
+          }
+        },
+        "findings": { "type": "array", "items": { "$ref": "#/$defs/finding" } }
+      }
+    },
+    "simulation": {
+      "type": "object",
+      "required": ["simulated", "policy", "consequence", "note"],
+      "properties": {
+        "simulated": { "const": true },
+        "policy": { "enum": ["fail-open", "fail-closed"] },
+        "consequence": { "enum": ["continued", "synthetic_denial"] },
+        "note": { "type": "string" }
+      }
+    }
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "id": "evt_rules_force_push_001",
+  "source": "urn:uuid:e322eb33-ac4b-4f38-b7d1-7f375efbd11c",
+  "type": "tool.before",
+  "time": "2026-08-27T02:00:00Z",
+  "session": {
+    "id": "sess_deterministic_rules_demo",
+    "cwd": "/repo",
+    "workspaceRoots": [
+      "/repo"
+    ]
+  },
+  "tool": {
+    "callId": "call_force_push_001",
+    "name": "Bash",
+    "kind": "shell",
+    "input": {
+      "command": "git push origin main --force"
+    }
+  }
+}

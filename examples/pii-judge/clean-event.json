@@ -1,0 +1,26 @@
+{
+  "id": "evt_claude_pii_002",
+  "source": "urn:uuid:0c27e5e8-4372-4629-8a4b-628cc0359756",
+  "type": "tool.before",
+  "time": "2026-08-27T01:00:00Z",
+  "session": {
+    "id": "sess_claude_pii_demo",
+    "cwd": "/repo",
+    "workspaceRoots": [
+      "/repo"
+    ]
+  },
+  "tool": {
+    "callId": "call_publish_notes_001",
+    "name": "http_request",
+    "kind": "fetch",
+    "input": {
+      "method": "POST",
+      "url": "https://api.example.test/releases",
+      "body": {
+        "version": "1.4.0",
+        "summary": "Publish the public release notes."
+      }
+    }
+  }
+}

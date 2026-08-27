@@ -1,0 +1,22 @@
+{
+  "id": "evt_rules_production_deploy_001",
+  "source": "urn:uuid:e4470cc4-021e-4817-858a-1de3ec36a3b6",
+  "type": "tool.before",
+  "time": "2026-08-27T02:00:00Z",
+  "session": {
+    "id": "sess_deterministic_rules_demo",
+    "cwd": "/repo",
+    "workspaceRoots": [
+      "/repo"
+    ]
+  },
+  "tool": {
+    "callId": "call_production_deploy_001",
+    "name": "deploy_production",
+    "kind": "other",
+    "input": {
+      "service": "payments-api",
+      "version": "1.4.0"
+    }
+  }
+}

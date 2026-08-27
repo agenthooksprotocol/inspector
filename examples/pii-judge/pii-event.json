@@ -1,0 +1,26 @@
+{
+  "id": "evt_claude_pii_001",
+  "source": "urn:uuid:7cb1a90e-b4ce-4f0c-ae2c-fefbf2782baa",
+  "type": "tool.before",
+  "time": "2026-08-27T01:00:00Z",
+  "session": {
+    "id": "sess_claude_pii_demo",
+    "cwd": "/repo",
+    "workspaceRoots": [
+      "/repo"
+    ]
+  },
+  "tool": {
+    "callId": "call_send_contact_001",
+    "name": "http_request",
+    "kind": "fetch",
+    "input": {
+      "method": "POST",
+      "url": "https://api.example.test/crm/contacts",
+      "body": {
+        "customerEmail": "alex.taylor@example.test",
+        "customerPhone": "+1-202-555-0147"
+      }
+    }
+  }
+}

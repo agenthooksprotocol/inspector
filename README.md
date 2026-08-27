@@ -92,6 +92,85 @@ Remember `no_effect` is not "allow": it does not bypass other interceptors, host
 
 Try a denial (`--mode deny`), a timeout (`--mode timeout`), a malformed response (`--mode malformed-json`), or an ID mismatch (`--mode id-mismatch`). Add `--pretty` to pretty-print the JSON, `--verbose` to include raw frames, backend stderr, process state, and timing in the record, and `--export /tmp/bundle.json` to capture everything.
 
+## Claude PII judge walkthrough
+
+[`examples/pii-judge/claude-pii-judge.ts`](examples/pii-judge/claude-pii-judge.ts) is a small TypeScript per-event backend that uses the AHP SDK for NDJSON framing, request parsing, protocol constants, response types, and response validation. It sends only `event.tool.input` to `claude -p` and asks for a schema-constrained PII verdict. The adapter, rather than the model, constructs the correlated AHP response:
+
+- PII found: one `deny` effect, classified by the Inspector as `explicit_deny`.
+- No PII found: `effects: []`, classified as `no_effect`.
+- Claude unavailable, timed out, or malformed output: the adapter exits nonzero, classified as `operational_failure`.
+
+This requires an installed and authenticated `claude` CLI. The adapter runs it with `--safe-mode`, no tools, no session persistence, JSON output, and a JSON schema. You can optionally select a model with `CLAUDE_MODEL`, for example `CLAUDE_MODEL=sonnet`.
+
+Run the synthetic PII example:
+
+```bash
+node dist/src/cli/main.js \
+  --transport stdio --method hooks/intercept \
+  --event examples/pii-judge/pii-event.json \
+  --timeout-ms 120000 --failure-policy fail-closed \
+  -- node dist/examples/pii-judge/claude-pii-judge.js
+```
+
+The category list can vary, but the response should have this shape:
+
+```json
+{"result":{"classification":"explicit_deny","effects":[{"type":"deny","reason":"Claude PII judge detected potential PII (email_address, phone_number).","code":"com.example.policy.pii_detected"}]}}
+```
+
+Then exercise the no-effect path:
+
+```bash
+node dist/src/cli/main.js \
+  --transport stdio --method hooks/intercept \
+  --event examples/pii-judge/clean-event.json \
+  --timeout-ms 120000 --failure-policy fail-closed \
+  -- node dist/examples/pii-judge/claude-pii-judge.js
+```
+
+```json
+{"result":{"classification":"no_effect","effects":[]}}
+```
+
+The PII values in the sample are fictitious, but the adapter sends tool input to the configured Claude service. Use only data you are permitted to send. This is a behavior demonstration, not a production PII control: LLM classifications can be nondeterministic and adversarial input can attempt prompt injection.
+
+## Deterministic rules walkthrough
+
+[`examples/deterministic-rules/deterministic-policy.ts`](examples/deterministic-rules/deterministic-policy.ts) demonstrates an SDK-backed TypeScript backend with no model or network dependency. Its ordered rules deny:
+
+- Any tool named `deploy_production`.
+- A shell tool whose command invokes `git push` with `-f`, `--force`, or a force variant.
+
+Run the force-push example:
+
+```bash
+node dist/src/cli/main.js \
+  --transport stdio --method hooks/intercept \
+  --event examples/deterministic-rules/force-push-event.json \
+  --timeout-ms 1000 --failure-policy fail-closed \
+  -- node dist/examples/deterministic-rules/deterministic-policy.js
+```
+
+```json
+{"result":{"classification":"explicit_deny","effects":[{"type":"deny","reason":"Force pushes are blocked by the deterministic example policy.","code":"com.example.policy.force_push"}]}}
+```
+
+Use `production-deploy-event.json` with the same command to exercise the exact tool-name rule. A call that matches no rule returns no effect:
+
+```bash
+node dist/src/cli/main.js \
+  --transport stdio --method hooks/intercept \
+  --event examples/deterministic-rules/git-status-event.json \
+  --timeout-ms 1000 --failure-policy fail-closed \
+  -- node dist/examples/deterministic-rules/deterministic-policy.js
+```
+
+```json
+{"result":{"classification":"no_effect","effects":[]}}
+```
+
+The shell rule intentionally uses simple string matching for readability. A production policy should evaluate structured tool arguments or a real shell parser if it must handle quoting, aliases, wrappers, or other syntactic variations.
+
 ## HTTP walkthrough (sample server)
 
 Start a minimal AHP backend on loopback:

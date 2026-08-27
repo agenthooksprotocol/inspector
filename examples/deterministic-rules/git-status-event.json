@@ -1,0 +1,21 @@
+{
+  "id": "evt_rules_git_status_001",
+  "source": "urn:uuid:6c2f8db0-83ae-467c-a12d-7bd91be14e30",
+  "type": "tool.before",
+  "time": "2026-08-27T02:00:00Z",
+  "session": {
+    "id": "sess_deterministic_rules_demo",
+    "cwd": "/repo",
+    "workspaceRoots": [
+      "/repo"
+    ]
+  },
+  "tool": {
+    "callId": "call_git_status_001",
+    "name": "Bash",
+    "kind": "shell",
+    "input": {
+      "command": "git status --short"
+    }
+  }
+}
